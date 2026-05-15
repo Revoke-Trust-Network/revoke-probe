@@ -18,27 +18,30 @@ high-value paths these agents have read access to.
 
 ## Install
 
-### macOS
+> ⚠️ **Early access — full CLI shipping late May 2026.**
+> The install paths below will become live as soon as the binary drops. In the meantime, [star the repo](https://github.com/Revoke-Trust-Network/revoke-probe) to get notified, or read the [path pattern catalog](docs/path-patterns.md) to see what the probe scans.
+
+### macOS (coming May 2026)
 
 ```sh
 brew tap Revoke-Trust-Network/tap
 brew install revoke-probe
 ```
 
-### Linux / WSL
+### Linux / WSL (coming May 2026)
 
 ```sh
 curl -fsSL https://revokenode.io/install.sh | sh
 ```
 
-### Windows (Scoop)
+### Windows / Scoop (coming May 2026)
 
 ```powershell
 scoop bucket add revoke https://github.com/Revoke-Trust-Network/scoop-bucket
 scoop install revoke-probe
 ```
 
-### From source
+### From source (works today, prints a preview banner)
 
 ```sh
 git clone https://github.com/Revoke-Trust-Network/revoke-probe
