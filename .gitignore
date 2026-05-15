@@ -1,0 +1,22 @@
+# Build artifacts
+*.o
+*.exe
+target/
+build/
+dist/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Test output
+/tmp/
+.cache/
+
+# Secrets (we eat our own dog food)
+.env
+.env.*
+*.pem
+*.key

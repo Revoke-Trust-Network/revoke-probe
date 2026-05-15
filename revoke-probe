@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# revoke-probe — local-first scanner
+# v0.1.0-preview — placeholder
+
+echo "revoke-probe v0.1.0-preview"
+echo ""
+echo "The full scanner is being released in late May 2026."
+echo "This repo currently contains the path pattern catalog and"
+echo "documentation. CLI binary coming soon."
+echo ""
+echo "Watch for releases: https://github.com/Revoke-Trust-Network/revoke-probe/releases"
