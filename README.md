@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux%20|%20Windows-blue)]()
-[![Status](https://img.shields.io/badge/status-early%20access-orange)]()
+[![Status](https://img.shields.io/badge/status-v0.1.0-green)]()
 
 Cursor, Claude Code, Cline, Aider, Copilot, and MCP servers running on your
 machine inherit your user's read permissions. They can see every file under
@@ -18,35 +18,24 @@ high-value paths these agents have read access to.
 
 ## Install
 
-> ⚠️ **Early access — full CLI shipping late May 2026.**
-> The install paths below will become live as soon as the binary drops. In the meantime, [star the repo](https://github.com/Revoke-Trust-Network/revoke-probe) to get notified, or read the [path pattern catalog](docs/path-patterns.md) to see what the probe scans.
-
-### macOS (coming May 2026)
+### macOS
 
 ```sh
-brew tap Revoke-Trust-Network/tap
-brew install revoke-probe
+brew install Revoke-Trust-Network/tap/revoke-probe
 ```
 
-### Linux / WSL (coming May 2026)
+### Linux / WSL / Git Bash
 
 ```sh
 curl -fsSL https://revokenode.io/install.sh | sh
 ```
 
-### Windows / Scoop (coming May 2026)
-
-```powershell
-scoop bucket add revoke https://github.com/Revoke-Trust-Network/scoop-bucket
-scoop install revoke-probe
-```
-
-### From source (works today, prints a preview banner)
+### From source
 
 ```sh
 git clone https://github.com/Revoke-Trust-Network/revoke-probe
 cd revoke-probe
-./revoke-probe
+./revoke-probe --scan
 ```
 
 ## Usage
@@ -58,6 +47,13 @@ $ revoke-probe --scan
 Output is a structured report of which agent-accessible paths match common
 high-value patterns, sorted by risk tier.
 
+For automation:
+
+```sh
+revoke-probe --scan --json
+revoke-probe --scan --path /path/to/test/root
+```
+
 ## What it scans (path pattern catalog)
 
 See [docs/path-patterns.md](docs/path-patterns.md) for the full list.
@@ -67,6 +63,7 @@ variants, browser profiles, and framework config dirs.
 ## What it does NOT do
 
 - ❌ Upload anything anywhere — it's read-only and local
+- ❌ Read secret file contents — it only checks path existence/readability
 - ❌ Prevent agents from reading these files (that's `revoke-node` Pro)
 - ❌ Modify your filesystem in any way
 - ❌ Track you, your IP, or anything else
@@ -100,9 +97,12 @@ PRs welcome, especially:
 ## Roadmap
 
 - [x] Path pattern catalog
-- [ ] CLI binary (in progress — release planned for May 2026)
-- [ ] JSON output mode
+- [x] Shell CLI scanner
+- [x] JSON output mode
+- [x] Homebrew tap
 - [ ] eBPF-backed real-time read tracing (Linux)
+- [ ] Native Windows PowerShell installer
+- [ ] Scoop package
 - [ ] CI integration mode
 
 ## Pro tier — `revoke-node`

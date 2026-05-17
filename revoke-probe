@@ -1,11 +1,324 @@
 #!/usr/bin/env sh
-# revoke-probe — local-first scanner
-# v0.1.0-preview — placeholder
+# revoke-probe — local-first scanner for agent-readable dev secrets.
+# It only checks path existence/readability. It never reads file contents,
+# uploads data, or modifies the filesystem.
 
-echo "revoke-probe v0.1.0-preview"
-echo ""
-echo "The full scanner is being released in late May 2026."
-echo "This repo currently contains the path pattern catalog and"
-echo "documentation. CLI binary coming soon."
-echo ""
-echo "Watch for releases: https://github.com/Revoke-Trust-Network/revoke-probe/releases"
+set -eu
+
+VERSION="0.1.0"
+JSON_OUTPUT=0
+QUIET=0
+HOME_DIR="${REVOKE_HOME:-${HOME:-}}"
+PROJECT_ROOT="${PWD:-.}"
+TMP_FILE=""
+
+usage() {
+  cat <<'EOF'
+revoke-probe — local-first scanner for AI coding agent readable paths
+
+Usage:
+  revoke-probe --scan [--path DIR] [--json] [--quiet]
+  revoke-probe --version
+  revoke-probe --help
+
+Options:
+  --scan        Run the local read-access scan.
+  --path DIR    Treat DIR as the scan root for both home and project checks.
+                Useful for CI smoke tests and scoped audits.
+  --json        Emit machine-readable JSON.
+  --quiet       Hide explanatory notes in text output.
+  --version     Print version.
+  --help        Show this help.
+
+What it does:
+  - Enumerates readable high-value paths under your user account.
+  - Reports path names and categories only.
+  - Does not read secret contents, upload data, or write files.
+EOF
+}
+
+die() {
+  printf 'revoke-probe: %s\n' "$*" >&2
+  exit 1
+}
+
+cleanup() {
+  if [ -n "$TMP_FILE" ] && [ -f "$TMP_FILE" ]; then
+    rm -f "$TMP_FILE"
+  fi
+}
+
+canonical_dir() {
+  [ -n "$1" ] || die "empty path"
+  if [ -d "$1" ]; then
+    (cd "$1" 2>/dev/null && pwd -P) || return 1
+  else
+    return 1
+  fi
+}
+
+add_hit() {
+  tier="$1"
+  family="$2"
+  path="$3"
+  note="$4"
+
+  [ -n "$TMP_FILE" ] || die "internal error: scan file not initialized"
+  printf '%s\t%s\t%s\t%s\n' "$tier" "$family" "$path" "$note" >> "$TMP_FILE"
+}
+
+check_path() {
+  family="$1"
+  path="$2"
+  tier="$3"
+  note="$4"
+
+  if [ -e "$path" ] && [ -r "$path" ]; then
+    add_hit "$tier" "$family" "$path" "$note"
+  fi
+}
+
+check_dir() {
+  family="$1"
+  path="$2"
+  tier="$3"
+  note="$4"
+
+  if [ -d "$path" ] && [ -r "$path" ]; then
+    add_hit "$tier" "$family" "$path" "$note"
+  fi
+}
+
+scan_browser_extension_dirs() {
+  base="$1"
+  browser="$2"
+
+  [ -d "$base" ] && [ -r "$base" ] || return 0
+
+  # Chrome extension ids: MetaMask, Phantom, Rabby. We only report the vault
+  # directory path and never inspect the LevelDB contents.
+  find "$base" -type d \( \
+      -path "*/Local Extension Settings/nkbihfbeogaeaoehlefnkodbefgpgknn" -o \
+      -path "*/Local Extension Settings/bfnaelmomeimhlpmgjnjophhpkkoljpa" -o \
+      -path "*/Local Extension Settings/acmacodkjbdgmoleebolmdjonilkdbch" \
+    \) -print 2>/dev/null |
+    while IFS= read -r ext_dir; do
+      check_dir "browser wallet vaults" "$ext_dir" "HIGH" "$browser extension wallet storage is readable"
+    done
+}
+
+scan_project_tree() {
+  root="$1"
+  [ -d "$root" ] && [ -r "$root" ] || return 0
+
+  find "$root" \
+    \( -path "$root/.git" -o -path "$root/node_modules" -o -path "$root/target" -o -path "$root/dist" -o -path "$root/build" \) -prune -o \
+    -type f \( \
+      -name ".env" -o \
+      -name ".env.*" -o \
+      -name ".envrc" -o \
+      -name "secrets.yml" -o \
+      -name "secrets.yaml" -o \
+      -name "*.pem" -o \
+      -name "*.key" -o \
+      -name "*.p12" \
+    \) -print 2>/dev/null |
+    while IFS= read -r project_secret; do
+      check_path "project secrets" "$project_secret" "HIGH" "project-local secret pattern is readable"
+    done
+}
+
+scan_paths() {
+  check_path "ssh private key" "$HOME_DIR/.ssh/id_rsa" "HIGH" "SSH private key is readable"
+  check_path "ssh private key" "$HOME_DIR/.ssh/id_ed25519" "HIGH" "SSH private key is readable"
+  check_path "ssh private key" "$HOME_DIR/.ssh/id_ecdsa" "HIGH" "SSH private key is readable"
+  check_path "ssh private key" "$HOME_DIR/.ssh/id_dsa" "HIGH" "SSH private key is readable"
+  check_path "ssh config" "$HOME_DIR/.ssh/config" "MEDIUM" "SSH host aliases and proxy commands are readable"
+  check_path "ssh known hosts" "$HOME_DIR/.ssh/known_hosts" "LOW" "Remote host history is readable"
+
+  check_path "aws credentials" "$HOME_DIR/.aws/credentials" "HIGH" "AWS access keys may be readable"
+  check_path "aws config" "$HOME_DIR/.aws/config" "MEDIUM" "AWS profiles and regions are readable"
+  check_dir "gcloud credentials" "$HOME_DIR/.config/gcloud" "HIGH" "Google Cloud SDK credentials are readable"
+  check_dir "azure credentials" "$HOME_DIR/.azure" "HIGH" "Azure CLI token cache is readable"
+  check_path "kubernetes config" "$HOME_DIR/.kube/config" "HIGH" "Kubernetes cluster credentials are readable"
+
+  check_path "npm token" "$HOME_DIR/.npmrc" "HIGH" "npm registry token file is readable"
+  check_path "pypi token" "$HOME_DIR/.pypirc" "HIGH" "PyPI publishing credential file is readable"
+  check_path "docker auth" "$HOME_DIR/.docker/config.json" "HIGH" "Container registry auth file is readable"
+  check_path "cargo token" "$HOME_DIR/.cargo/credentials" "HIGH" "crates.io token file is readable"
+  check_path "cargo token" "$HOME_DIR/.cargo/credentials.toml" "HIGH" "crates.io token file is readable"
+  check_path "git credentials" "$HOME_DIR/.git-credentials" "HIGH" "Git HTTPS credentials are readable"
+  check_path "netrc credentials" "$HOME_DIR/.netrc" "HIGH" "HTTP basic auth credentials are readable"
+
+  check_dir "foundry keystores" "$HOME_DIR/.foundry/keystores" "HIGH" "Foundry wallet keystores are readable"
+  check_dir "ethereum keystore" "$HOME_DIR/.ethereum/keystore" "HIGH" "Ethereum wallet keystores are readable"
+  check_path "solana keypair" "$HOME_DIR/.config/solana/id.json" "HIGH" "Solana keypair is readable"
+  check_dir "electrum wallets" "$HOME_DIR/Library/Application Support/Electrum/wallets" "HIGH" "Electrum wallet directory is readable"
+  check_dir "electrum wallets" "$HOME_DIR/.electrum/wallets" "HIGH" "Electrum wallet directory is readable"
+
+  check_dir "chrome profile" "$HOME_DIR/Library/Application Support/Google/Chrome" "MEDIUM" "Chrome profile directory is readable"
+  check_dir "chrome profile" "$HOME_DIR/.config/google-chrome" "MEDIUM" "Chrome profile directory is readable"
+  check_dir "brave profile" "$HOME_DIR/Library/Application Support/BraveSoftware/Brave-Browser" "MEDIUM" "Brave profile directory is readable"
+  check_dir "brave profile" "$HOME_DIR/.config/BraveSoftware/Brave-Browser" "MEDIUM" "Brave profile directory is readable"
+  check_dir "firefox profile" "$HOME_DIR/Library/Application Support/Firefox/Profiles" "MEDIUM" "Firefox profile directory is readable"
+  check_dir "firefox profile" "$HOME_DIR/.mozilla/firefox" "MEDIUM" "Firefox profile directory is readable"
+
+  scan_browser_extension_dirs "$HOME_DIR/Library/Application Support/Google/Chrome" "Chrome"
+  scan_browser_extension_dirs "$HOME_DIR/.config/google-chrome" "Chrome"
+  scan_browser_extension_dirs "$HOME_DIR/Library/Application Support/BraveSoftware/Brave-Browser" "Brave"
+  scan_browser_extension_dirs "$HOME_DIR/.config/BraveSoftware/Brave-Browser" "Brave"
+
+  if [ -n "${APPDATA:-}" ]; then
+    check_dir "firefox profile" "$APPDATA/Mozilla/Firefox/Profiles" "MEDIUM" "Firefox profile directory is readable"
+  fi
+  if [ -n "${LOCALAPPDATA:-}" ]; then
+    check_dir "chrome profile" "$LOCALAPPDATA/Google/Chrome/User Data" "MEDIUM" "Chrome profile directory is readable"
+    check_dir "edge profile" "$LOCALAPPDATA/Microsoft/Edge/User Data" "MEDIUM" "Edge profile directory is readable"
+    scan_browser_extension_dirs "$LOCALAPPDATA/Google/Chrome/User Data" "Chrome"
+    scan_browser_extension_dirs "$LOCALAPPDATA/Microsoft/Edge/User Data" "Edge"
+  fi
+
+  scan_project_tree "$PROJECT_ROOT"
+}
+
+json_report() {
+  count="$1"
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date)"
+  awk -F '\t' \
+    -v version="$VERSION" \
+    -v generated_at="$now" \
+    -v home="$HOME_DIR" \
+    -v project="$PROJECT_ROOT" \
+    -v count="$count" '
+      function esc(s) {
+        gsub(/\\/,"\\\\",s)
+        gsub(/"/,"\\\"",s)
+        gsub(/\r/,"\\r",s)
+        gsub(/\n/,"\\n",s)
+        gsub(/\t/,"\\t",s)
+        return s
+      }
+      BEGIN {
+        printf "{"
+        printf "\"tool\":\"revoke-probe\","
+        printf "\"version\":\"%s\",", esc(version)
+        printf "\"generated_at\":\"%s\",", esc(generated_at)
+        printf "\"home\":\"%s\",", esc(home)
+        printf "\"project_root\":\"%s\",", esc(project)
+        printf "\"finding_count\":%d,", count
+        printf "\"findings\":["
+      }
+      {
+        if (NR > 1) printf ","
+        printf "{"
+        printf "\"tier\":\"%s\",", esc($1)
+        printf "\"family\":\"%s\",", esc($2)
+        printf "\"path\":\"%s\",", esc($3)
+        printf "\"note\":\"%s\"", esc($4)
+        printf "}"
+      }
+      END {
+        printf "]}"
+        printf "\n"
+      }
+    ' "$TMP_FILE"
+}
+
+text_report() {
+  count="$1"
+  printf '\n'
+  printf 'revoke-probe %s — local read-access scan\n' "$VERSION"
+  printf 'home:    %s\n' "$HOME_DIR"
+  printf 'project: %s\n' "$PROJECT_ROOT"
+  printf '\n'
+
+  if [ "$count" -eq 0 ]; then
+    printf '[+] No readable high-value path patterns found in this scoped scan.\n'
+    printf '\n'
+    return
+  fi
+
+  printf '[!] %s readable high-value path(s) matched.\n' "$count"
+  printf '\n'
+  awk -F '\t' -v quiet="$QUIET" '
+    BEGIN {
+      printf "%-8s  %-23s  %s\n", "TIER", "FAMILY", "PATH"
+      printf "%-8s  %-23s  %s\n", "----", "------", "----"
+    }
+    {
+      printf "%-8s  %-23s  %s\n", $1, $2, $3
+      if (quiet != 1 && length($4) > 0) {
+        printf "%-8s  %-23s  %s\n", "", "", $4
+      }
+    }
+  ' "$TMP_FILE"
+  printf '\n'
+  printf 'No file contents were read. No data was uploaded.\n'
+  printf 'Next: review paths above, then use OS permissions or Revoke Node to block agent access.\n'
+  printf '\n'
+}
+
+run_scan() {
+  [ -n "$HOME_DIR" ] || die "HOME is not set; pass --path DIR or set REVOKE_HOME"
+  HOME_DIR="$(canonical_dir "$HOME_DIR")" || die "home scan root is not a readable directory: $HOME_DIR"
+  PROJECT_ROOT="$(canonical_dir "$PROJECT_ROOT")" || die "project scan root is not a readable directory: $PROJECT_ROOT"
+
+  TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/revoke-probe.XXXXXX")" || die "mktemp failed"
+  trap cleanup EXIT INT TERM
+
+  scan_paths
+  sort -t "$(printf '\t')" -k1,1 -k2,2 -k3,3 -u "$TMP_FILE" -o "$TMP_FILE"
+  count="$(wc -l < "$TMP_FILE" | tr -d ' ')"
+
+  if [ "$JSON_OUTPUT" -eq 1 ]; then
+    json_report "$count"
+  else
+    text_report "$count"
+  fi
+}
+
+if [ "$#" -eq 0 ]; then
+  usage
+  exit 0
+fi
+
+SCAN=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --scan)
+      SCAN=1
+      shift
+      ;;
+    --path)
+      [ "$#" -ge 2 ] || die "--path requires a directory"
+      HOME_DIR="$2"
+      PROJECT_ROOT="$2"
+      shift 2
+      ;;
+    --json)
+      JSON_OUTPUT=1
+      shift
+      ;;
+    --quiet)
+      QUIET=1
+      shift
+      ;;
+    --version)
+      printf 'revoke-probe %s\n' "$VERSION"
+      exit 0
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      die "unknown option: $1"
+      ;;
+  esac
+done
+
+if [ "$SCAN" -eq 1 ]; then
+  run_scan
+else
+  usage
+fi
