@@ -1,20 +1,22 @@
 # Revoke Probe
 
-> Local-first scanner — see what AI coding agents can read on your dev machine.
+Local-first reachability check for AI coding-agent and MCP workflows.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux%20|%20Windows-blue)]()
+[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux-blue)]()
 [![Status](https://img.shields.io/badge/status-v0.1.0-green)]()
 
-Cursor, Claude Code, Cline, Aider, Copilot, and MCP servers running on your
-machine inherit your user's read permissions. They can see every file under
-`$HOME` that your shell can — including `.env`, `~/.ssh/`, `~/.aws/`, browser
-profiles, and wallet keystores.
+Revoke Probe helps you answer one narrow question:
 
-`revoke-probe` is a 90-second local scan that enumerates exactly which
-high-value paths these agents have read access to.
+> What sensitive-looking local surfaces could this developer workflow reach?
 
-**No telemetry. No upload. Open source.**
+It scans for common credential-adjacent path patterns and can be paired with
+**fake canaries** to produce a **sanitized report** you can share after review.
+
+No telemetry. No source upload. No real secret values in the report. No
+vendor-blame claims.
+
+`revoke-probe` is the free local probe used by Agent Leak Bench.
 
 ## Install
 
@@ -27,7 +29,7 @@ brew install Revoke-Trust-Network/tap/revoke-probe
 ### Linux / WSL / Git Bash
 
 ```sh
-curl -fsSL https://revokenode.io/install.sh | sh
+curl -fsSL https://revokenode.io/install.sh -o revoke-probe-install.sh && sh revoke-probe-install.sh
 ```
 
 ### From source
@@ -44,8 +46,9 @@ cd revoke-probe
 $ revoke-probe --scan
 ```
 
-Output is a structured report of which agent-accessible paths match common
-high-value patterns, sorted by risk tier.
+Output is a structured report of which AI-tool-accessible paths match common
+high-value patterns, sorted by risk tier. The report is designed to be safe to
+share after review because it must not include real secret values.
 
 For automation:
 
@@ -57,40 +60,51 @@ revoke-probe --scan --path /path/to/test/root
 ## What it scans (path pattern catalog)
 
 See [docs/path-patterns.md](docs/path-patterns.md) for the full list.
-TL;DR — 18 path families across SSH/cloud creds, wallet keystores, dotenv
-variants, browser profiles, and framework config dirs.
+TL;DR — 18 path families across SSH/cloud creds, dotenv variants, browser
+profiles, and framework config dirs.
 
-## What it does NOT do
+## Fake canaries
 
-- ❌ Upload anything anywhere — it's read-only and local
-- ❌ Read secret file contents — it only checks path existence/readability
-- ❌ Prevent agents from reading these files (that's `revoke-node` Pro)
-- ❌ Modify your filesystem in any way
-- ❌ Track you, your IP, or anything else
+The benchmark uses fake values only:
+
+- fake AWS key marker
+- fake Stripe key marker
+- fake GitHub token marker
+- fake OpenAI key marker
+- fake SSH private key marker
+
+Do not paste real credentials into issues, reports, screenshots, posts, or
+support emails.
+
+## What it proves
+
+- Which sensitive path families are reachable on this machine.
+- Which findings are worth reviewing before a team standardizes an AI coding workflow.
+
+## What it does NOT prove
+
+- It does not prove a vendor stole your data.
+- It does not upload anything anywhere.
+- It does not require real secret values.
+- It does not prevent agents from reading these files by itself.
+- It does not replace endpoint security, MDM, or secrets management.
+- It does not modify your filesystem outside controlled benchmark fixtures.
 
 ## Why this exists
 
-Three things happened in 2026 that shipped this from "weekend script" to
-"open source today":
+AI coding tools moved fast. Team policy did not. Most developers can name the AI
+assistant they installed, but they cannot quickly answer a more operational
+question:
 
-- **March 31, 2026** — Anthropic's Claude Code source map leaked via npm.
-  512K lines of TypeScript exposed. The leak itself wasn't the bug; the
-  permission model was the bug.
-- **April 25, 2026** — Jer Crane's PocketOS prod database was wiped by a
-  Cursor agent in `--auto` mode in 9 seconds.
-- **May 7, 2026** — Adversa AI disclosed TrustFall, a chained prompt
-  injection across MCP STDIO that affects Claude Code 2.1+, Cursor CLI,
-  Gemini CLI, and Copilot CLI.
+> What can my current AI coding stack touch on this machine?
 
-The pattern across all three: agents inherit user-level read access by
-default. We needed a tool to show, in 90 seconds, exactly what that means
-on a given machine. So we wrote it.
+This benchmark exists to make that question visible, reproducible, and boring
+enough to discuss without vendor-blame theater.
 
 ## Contributing
 
 PRs welcome, especially:
 
-- Windows path enumeration (currently weak)
 - Additional dotfile patterns we missed
 - Translations of the report output
 
@@ -101,16 +115,25 @@ PRs welcome, especially:
 - [x] JSON output mode
 - [x] Homebrew tap
 - [ ] eBPF-backed real-time read tracing (Linux)
-- [ ] Native Windows PowerShell installer
-- [ ] Scoop package
 - [ ] CI integration mode
 
 ## Pro tier — `revoke-node`
 
-`revoke-probe` shows you what agents *can* read.
-[`revoke-node`](https://revokenode.io) is the OS-layer firewall that blocks,
-allows, or audits these reads in real time. Probe is free forever. Node is
-$29/mo for individuals.
+`revoke-probe` focuses on scan + report.
+
+[`revoke-node`](https://revokenode.io) is the commercial product line around the
+same problem space. This README intentionally avoids capability promises that
+are not verified inside this repo.
+
+## Team Pilot
+
+Teams using Cursor, Claude Code, Codex CLI, Windsurf, VS Code extensions, or MCP
+servers can request a 30-day audit:
+
+```text
+support@revokenode.io
+Subject: Team Pilot
+```
 
 ## License
 
