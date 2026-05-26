@@ -29,7 +29,8 @@ brew install Revoke-Trust-Network/tap/revoke-probe
 ### Linux / WSL / Git Bash
 
 ```sh
-curl -fsSL https://revokenode.io/install.sh -o revoke-probe-install.sh && sh revoke-probe-install.sh
+curl -fsSL https://raw.githubusercontent.com/Revoke-Trust-Network/revoke-probe/v0.1.0/install.sh -o revoke-probe-install.sh
+sh revoke-probe-install.sh
 ```
 
 ### From source
@@ -121,9 +122,9 @@ PRs welcome, especially:
 
 `revoke-probe` focuses on scan + report.
 
-[`revoke-node`](https://revokenode.io) is the commercial product line around the
-same problem space. This README intentionally avoids capability promises that
-are not verified inside this repo.
+`revoke-node` is the commercial product line around the same problem space.
+This README intentionally avoids capability promises that are not verified
+inside this repo.
 
 ## Team Pilot
 
